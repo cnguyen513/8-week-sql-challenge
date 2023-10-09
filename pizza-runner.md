@@ -148,39 +148,158 @@ ALTER COLUMN duration INT;
 ```sql
 -- Total count of pizzas ordered
 SELECT 
-    SUM(pizza_id)
-FROM pizza_runner.customer_orders
+    COUNT(order_id)
+FROM pizza_runner.dbo.tmp_customer_orders
 ```
 | sum |
 | --- |
-| 18  |
+| 14  |
 
 ### 2. How many unique customer orders were made?
-- add customer_id and group by customer_id
+- find the count of unique order id's
 ```sql
 -- Count of pizzas ordered per customer_id
 SELECT 
-	customer_id,
-    SUM(pizza_id)
-FROM pizza_runner.customer_orders
-GROUP BY 1
+    COUNT(DISTINCT(order_id))
+FROM pizza_runner.dbo.tmp_customer_orders
 ```
-| customer_id | sum |
-| ----------- | --- |
-| 101         | 4   |
-| 103         | 5   |
-| 104         | 3   |
-| 105         | 2   |
-| 102         | 4   |
+unique_customer_orders
+10
 
 ### 3. How many successful orders were delivered by each runner?
+- want runner_id and order_id
+- count order_id where pickup_time/distance/duration is not null
+```sql
+SELECT 
+    runner_id,
+	COUNT(order_id) AS order_count
+FROM pizza_runner.dbo.tmp_runner_orders
+WHERE pickup_time IS NOT NULL
+GROUP BY runner_id
+```
+| runner_id | order_count |
+|-----------|-------------|
+| 1         | 4           | 
+| 2         | 3           |
+| 3         | 1           | 
+
+### 4. How many of each type of pizza was delivered?
+- tables: tmp_customer_orders for what was in the order, tmp_runner_orders for the delivered orders, pizza_names if we want to correlate pizza_id
+- additional notes: needed to change data type of pizza_names.pizza_name to varchar because I couldn't do a GROUP BY without running into an error
+```sql
+SELECT 
+	p_name.pizza_name,
+	COUNT(c_ord.order_id) AS Count
+FROM pizza_runner.dbo.tmp_runner_orders r_ord
+JOIN pizza_runner.dbo.tmp_customer_orders c_ord
+	ON c_ord.order_id = r_ord.order_id
+JOIN pizza_runner.dbo.pizza_names p_name
+	ON c_ord.pizza_id = p_name.pizza_id
+WHERE r_ord.distance IS NOT NULL
+GROUP BY p_name.pizza_name
+```
+| pizza_name | Count |
+|------------|-------|
+| Meatlovers | 9     |
+| Vegetarian | 3     |
+
+5. How many Vegetarian and Meatlovers were ordered by each customer?
+- tables: tmp_customer_orders, pizza_names
+- GROUP BY customer_id, pizza_id
+```sql
+SELECT 
+    c_ord.customer_id,
+	p_name.pizza_name,
+	COUNT(p_name.pizza_name) AS pizza_count
+FROM pizza_runner.dbo.tmp_customer_orders c_ord
+JOIN pizza_runner.dbo.pizza_names p_name
+	ON c_ord.pizza_id = p_name.pizza_id
+GROUP BY c_ord.customer_id, p_name.pizza_name
+ORDER BY c_ord.customer_id
+```
+
+| customer_id | pizza_name | pizza_count |
+|-------------|------------|-------------|
+| 101         | Meatlovers | 2           |
+| 101         | Vegetarian | 1           |
+| 102         | Meatlovers | 2           |
+| 102         | Vegetarian | 1           |
+| 103         | Meatlovers | 3           |
+| 103         | Vegetarian | 1           |
+| 104         | Meatlovers | 3           |
+| 105         | Vegetarian | 1           |
+
+### 6. What was the maximum number of pizzas delivered in a single order?
+- table: tmp_customer_orders
+- looking for order_id
+```sql
+WITH cte_c_order AS (
+SELECT 
+    order_id,
+	COUNT(customer_id) AS order_count
+FROM pizza_runner.dbo.tmp_customer_orders c_ord
+GROUP BY order_id
+)
+
+SELECT 
+    cte_c_order.order_id,
+	MAX(order_count) AS order_count
+FROM cte_c_order
+GROUP BY cte_c_order.order_id
+ORDER BY order_count DESC
+```
+
+| order_id | order_count |
+|----------|-------------|
+| 4        | 3           |
+| 3        | 2           |
+| 10       | 2           |
+| 1        | 1           |
+| 2        | 1           |
+| 5        | 1           |
+| 6        | 1           |
+| 7        | 1           |
+| 8        | 1           |
+| 9        | 1           |
+
+### 7. For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
+- table: tmp_customer_orders
+- select column exclusions or extras
+	- has a value or no value
+- maybe need to do a CASE statement, create a new column for has exclusion, or no exclusion
+```sql
+WITH cte_exclusions AS (
+	SELECT order_id,
+		customer_id,
+		exclusions,
+		extras,
+		CASE
+			WHEN exclusions != '' OR extras != '' THEN '1'
+		END AS changed,
+		CASE
+			WHEN exclusions = '' AND extras = '' THEN '1'
+		END AS unchanged
+	FROM pizza_runner.dbo.tmp_customer_orders
+)
+
+SELECT 
+	customer_id,
+	COUNT(changed) AS changed,
+	COUNT(unchanged) AS unchanged
+FROM cte_exclusions
+GROUP BY customer_id
+```
+
+| customer_id | changed | unchanged |
+|-------------|---------|-----------|
+| 101         | 0       | 3         |
+| 102         | 0       | 3         |
+| 103         | 4       | 0         |
+| 104         | 2       | 1         |
+| 105         | 1       | 0         |
+
+### 8. How many pizzas were delivered that had both exclusions and extras?
 - 
 
-
-4. How many of each type of pizza was delivered?
-5. How many Vegetarian and Meatlovers were ordered by each customer?
-6. What was the maximum number of pizzas delivered in a single order?
-7. For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
-8. How many pizzas were delivered that had both exclusions and extras?
-What was the total volume of pizzas ordered for each hour of the day?
-9. What was the volume of orders for each day of the week?
+9. What was the total volume of pizzas ordered for each hour of the day?
+10. What was the volume of orders for each day of the week?

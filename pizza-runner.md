@@ -89,11 +89,12 @@ ALTER COLUMN duration INT;
 
 ## A. Pizza Metrics
 ### 1. How many pizzas were ordered?
+- I'm using SQL Server Management Studio instead of the db-fiddle that's provided, so some syntax is a little different
 - want to get sum of pizza count
 ```sql
 -- Total count of pizzas ordered
 SELECT 
-    COUNT(order_id)
+    COUNT(order_id) AS sum
 FROM pizza_runner.dbo.tmp_customer_orders
 ```
 | sum |
@@ -108,8 +109,9 @@ SELECT
     COUNT(DISTINCT(order_id))
 FROM pizza_runner.dbo.tmp_customer_orders
 ```
-unique_customer_orders
-10
+| unique_orders |
+|---------------|
+| 10            |
 
 ### 3. How many successful orders were delivered by each runner?
 - want runner_id and order_id
@@ -244,16 +246,102 @@ GROUP BY customer_id
 | 105         | 1       | 0         |
 
 ### 8. How many pizzas were delivered that had both exclusions and extras?
-- 
+- list order_id where there is exclusion and extras
+- don't want distance = 'null'
+```sql
+SELECT
+	COUNT(*) AS excl_extra
+FROM pizza_runner.dbo.tmp_customer_orders co
+JOIN pizza_runner.dbo.tmp_runner_orders ro
+	ON co.order_id = ro.order_id
+WHERE distance IS NOT NULL
+	AND exclusions != ''
+	AND extras != ''
+```
 
-9. What was the total volume of pizzas ordered for each hour of the day?
+| excl_extra |
+|------------|
+| 1          |
+
+### 9. What was the total volume of pizzas ordered for each hour of the day?
+- table: tmp_customer_orders
+- want order_time -- really only want the hour
+- maybe need to split into date and time, then round to the hour
+- learned there are a ton of ways to get the date/time you want (DATEADD, DATETRUNC, EXTRACT, DATEDIFF)
+```sql
+SELECT 
+	DATEPART(hour, order_time) AS hour_of_day,
+	COUNT(order_id) AS order_count
+FROM pizza_runner.dbo.tmp_customer_orders c_ord
+GROUP BY DATEPART(hour, order_time) 
+```
+
+| order_hour | order_count |
+|------------|-------------|
+| 11         | 1           |
+| 13         | 3           |
+| 18         | 3           |
+| 19         | 1           |
+| 21         | 3           |
+| 23         | 3           |
+
 10. What was the volume of orders for each day of the week?
+- want to do the same as the previous question, except get day of week
+```sql
+SELECT 
+	DATENAME(WEEKDAY, order_time) AS day_of_week,
+	COUNT(order_id) AS order_count
+FROM pizza_runner.dbo.tmp_customer_orders c_ord
+GROUP BY DATENAME(WEEKDAY, order_time)
+```
 
-
+| day_of_week | order_count |
+|-------------|-------------|
+| Friday      | 1           |
+| Saturday    | 5           |
+| Thursday    | 3           |
+| Wednesday   | 5           |
 
 ## B. Runner and Customer Experience
-1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
-2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+### 1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+- want the 1 week period starting on the 1st, which is a Friday. So we are doing Friday to Friday = one week
+- only want to count the distinct runners
+```sql
+SELECT
+	COUNT(DISTINCT(runner_id)) as runner_count,
+	DATEPART(WEEK, pickup_time) AS week
+FROM pizza_runner.dbo.tmp_runner_orders r_ord
+WHERE distance IS NOT NULL
+GROUP BY DATEPART(WEEK, pickup_time)
+```
+| runner_count | week |
+|--------------|------|
+| 2            | 1    |
+| 3            | 2    |
+
+### 2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+- want to take order_time and subtract pickup_time
+- needed each distinct order, since additional entries of the same order would change the average
+```sql
+WITH cte_joined_orders AS (
+	SELECT DISTINCT(c_ord.order_id),
+		runner_id,
+		order_time,
+		pickup_time
+	FROM pizza_runner.dbo.tmp_customer_orders c_ord
+	JOIN pizza_runner.dbo.tmp_runner_orders r_ord
+		ON c_ord.order_id = r_ord.order_id
+	WHERE r_ord.distance IS NOT NULL
+)
+
+SELECT
+	AVG(DATEDIFF(MINUTE, order_time, pickup_time)) AS avg_time
+FROM cte_joined_orders
+```
+| avg_time |
+|----------|
+| 16       |
+
 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
 4. What was the average distance travelled for each customer?
 5. What was the difference between the longest and shortest delivery times for all orders?

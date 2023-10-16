@@ -343,10 +343,100 @@ FROM cte_joined_orders
 | 16       |
 
 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
-4. What was the average distance travelled for each customer?
+```sql
+WITH cte_joined_orders AS (
+	SELECT c_ord.order_id,
+		DATEDIFF(SECOND, order_time, pickup_time) AS prep_time,
+		COUNT(c_ord.order_id) AS order_count
+	FROM pizza_runner.dbo.tmp_customer_orders c_ord
+	JOIN pizza_runner.dbo.tmp_runner_orders r_ord
+		ON c_ord.order_id = r_ord.order_id
+	WHERE r_ord.distance IS NOT NULL
+	GROUP BY c_ord.order_id, pickup_time, order_time
+
+)
+
+SELECT
+	order_count,
+	AVG(prep_time / 60) AS avg_pizza_time
+FROM cte_joined_orders
+GROUP BY order_count
+```
+| order_count | avg_pizza_time |
+|-------------|----------------|
+| 1           | 12             |
+| 2           | 18             |
+| 3           | 29             |
+
+### 4. What was the average distance travelled for each customer?
+- table: runner_orders
+- avg(distance)
+```sql
+SELECT
+	customer_id,
+	ROUND(AVG(distance), 2) AS avg_distance
+FROM pizza_runner.dbo.tmp_customer_orders c_ord
+JOIN pizza_runner.dbo.tmp_runner_orders r_ord
+	ON c_ord.order_id = r_ord.order_id
+WHERE r_ord.distance IS NOT NULL
+GROUP BY customer_id
+ORDER BY avg_distance DESC
+```
+| customer_id | avg_distance |
+|-------------|--------------|
+| 105         | 25.000000    |
+| 103         | 23.000000    |
+| 101         | 20.000000    |
+| 102         | 16.330000    |
+| 104         | 10.000000    |
+
 5. What was the difference between the longest and shortest delivery times for all orders?
+```sql
+SELECT
+	MAX(duration) - MIN(duration) AS delivery_time_diff
+FROM pizza_runner.dbo.tmp_runner_orders r_ord
+```
+| min_max_dist |
+|--------------|
+| 30           |
+
 6. What was the average speed for each runner for each delivery and do you notice any trend for these values?
+```sql
+SELECT
+	DISTINCT(order_id),
+	runner_id,
+	ROUND(distance / (CAST(duration AS decimal) / 60), 2) AS kmph
+FROM pizza_runner.dbo.tmp_runner_orders r_ord
+WHERE r_ord.distance IS NOT NULL
+ORDER BY runner_id, kmph
+```
+- most of the time is very close to 1 km = 1 min, but runner 2 has variation across all his runs ranging from slower to faster
+| order_id | runner_id | kmph              |
+|----------|-----------|-------------------|
+| 1        | 1         | 37.50000000000000 |
+| 3        | 1         | 39.00000000000000 |
+| 2        | 1         | 44.44000000000000 |
+| 10       | 1         | 60.00000000000000 |
+| 4        | 2         | 34.50000000000000 |
+| 7        | 2         | 60.00000000000000 |
+| 8        | 2         | 92.00000000000000 |
+| 5        | 3         | 40.00000000000000 |
+
 7. What is the successful delivery percentage for each runner?
+```sql
+SELECT
+	runner_id,
+	COUNT(distance) AS cnt_distance,
+	COUNT(runner_id) AS cnt_runner,
+	CAST(COUNT(distance) AS float) / CAST(COUNT(runner_id) AS float) * 100AS percent_delivered
+FROM pizza_runner.dbo.tmp_runner_orders r_ord
+GROUP BY runner_id
+```
+| runner_id | cnt_distance | cnt_runner | percent_delivered |
+|-----------|--------------|------------|-------------------|
+| 1         | 4            | 4          | 100               |
+| 2         | 3            | 4          | 75                |
+| 3         | 1            | 2          | 50                |
 
 ## C. Ingredient Optimisation
 1. What are the standard ingredients for each pizza?

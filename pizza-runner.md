@@ -411,6 +411,7 @@ WHERE r_ord.distance IS NOT NULL
 ORDER BY runner_id, kmph
 ```
 - most of the time is very close to 1 km = 1 min, but runner 2 has variation across all his runs ranging from slower to faster
+
 | order_id | runner_id | kmph              |
 |----------|-----------|-------------------|
 | 1        | 1         | 37.50000000000000 |
